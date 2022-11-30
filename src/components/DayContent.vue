@@ -1,11 +1,11 @@
 <template>
   <div id="daycont">
     <img id="OwnerImage" :src="imagePath" />
-    <div>[{{ date }}]'s Owner : {{ ownerBeforeMint }}</div>
+    <div>{{ date }}'s Owner : {{ ownerBeforeMint }}</div>
     <div id="buttonsComp">
       {{ text }}
       <input id="input" v-model="text" />
-      <button id="button" @click="writingPage">방명록 남기기</button>
+      <button id="button" @click="uploadMessage">방명록 남기기</button>
       <button id="button" @click="handleButtonClick">이미지 바꾸기</button>
       <input
         id="button"
@@ -16,7 +16,7 @@
         hidden
       />
     </div>
-    <div>{{ formData }}</div>
+    <div>{{ message }}</div>
   </div>
 </template>
 <script>
@@ -32,13 +32,11 @@ export default {
       imagePath: '',
       text: '',
       date: '',
-      formData: ''
+      message: '댓글이 없습니다'
     }
   },
   setup() {},
   async created() {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
-    this.account = accounts[0]
     await this.axios
       .get('https://clesson-dev.duckdns.org:8888/dates')
       .then((response) => {
@@ -46,6 +44,15 @@ export default {
         this.pageDates = res.data[this.pageDay - 1]
         this.imagePath = this.pageDates.imgUrl
         this.date = this.pageDates.date
+      })
+      .catch((error) => console.log(error))
+
+    await this.axios
+      .get('https://clesson-dev.duckdns.org:8888/message/' + this.date)
+      .then((response) => {
+        const resm = response.data
+        console.log(resm)
+        this.message = resm.data.dateMessages[0]
       })
       .catch((error) => console.log(error))
   },
@@ -56,17 +63,26 @@ export default {
     },
     async handleFileUpload(e) {
       e.preventDefault()
-
       if (e.target.files) {
         const uploadFile = e.target.files[0]
-        this.formData = new FormData()
-        this.formData.append('date', this.date)
-        this.formData.append('imgUrl', this.imagePath)
-        this.formData.append('files', uploadFile)
-        console.log(this.formData)
-
+        const formData = new FormData()
+        formData.append('date', this.date)
+        formData.append('imgUrl', this.imagePath)
+        formData.append('files', uploadFile)
+        console.log(formData)
         // await this.axios('https://clesson-dev.duckdns.org:8888/dates/image', formData)
       }
+    },
+    async uploadMessage() {
+      await this.axios
+        .post('https://clesson-dev.duckdns.org:8888/message', {
+          message: this.text,
+          date: this.date
+        })
+        .then((response) => {
+          console.log(response)
+        })
+        .catch((error) => console.log(error))
     }
   }
 }
