@@ -3,68 +3,76 @@
     <nav class="navi">
       <router-link class="center" to="/">DATE's</router-link>
       <div id="wallet">
-        <div id="walletAddress" v-show="isHidden">{{ account }}</div>
+        <div id="walletAddress" v-show="isHidden">{{ publicAddress }}</div>
         <font-awesome-icon
           :style="hidden"
           class="hoveringPointer"
-          @click="connect"
+          @click="handleClick"
           icon="fa-solid fa-wallet"
         />
       </div>
     </nav>
     <router-view />
+    <div>{{ signature }}</div>
   </div>
 </template>
 <script>
-// import { MINT_NFT_CONTRACT, MINT_NFT_ABI } from '../web3.config.js'
+var Web3 = require('web3')
+
+// "Web3.providers.givenProvider" will be set if in an Ethereum supported browser.
+var web3 = new Web3(Web3.givenProvider || 'ws://some.local-or-remote.node:8546')
+
 export default {
   components: {},
   data() {
     return {
-      REACT_APP_BACKEND_URL: 'https://clesson-dev.duckdns.org:8888/api',
       connected: false,
       tokenURIresult: '',
-      account: '',
+      publicAddress: '',
       isHidden: false,
-      nonce: 0
+      nonce: 0,
+      signature: ''
     }
   },
   setup() {},
   created() {},
   mounted() {},
   methods: {
-    async connect() {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
-      this.account = accounts[0]
+    async handleClick() {
       this.isHidden = !this.isHidden
-      await this.axios
-        .get('https://clesson-dev.duckdns.org:8888/users/sign-in', {
-          params: { address: this.account }
+      this.publicAddress = await window.ethereum.request({ method: 'eth_requestAccounts' })
+      this.publicAddress = this.publicAddress[0]
+      // Check if user with current publicAddress is already present on back end
+      this.axios
+        .get(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+          params: { address: this.publicAddress }
         })
         .then((response) => {
           const res = response.data
-          console.log(res)
+          const resdata = res.data
+          this.nonce = parseInt(resdata.nonce)
+          this.handleSignMessage(this.publicAddress)
+        })
+    },
+    async handleSignMessage(publicAddress) {
+      this.signature = await web3.eth.personal.sign(
+        web3.utils.fromUtf8(`I am signing my one-time nonce: ${this.nonce}`),
+        publicAddress,
+        // 일단 password는 test password! 로 저장
+        'test password!'
+      )
+      this.axios
+        .post(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+          address: publicAddress,
+          signature: this.signature
+        })
+        .then((response) => {
+          const res = response.data
           const resdata = res.data
           console.log(resdata)
-          this.nonce = parseInt(resdata.nonce)
         })
         .catch((error) => console.log(error))
     }
-
-    // callContract() {
-    //   // method for calling the contract method
-    //   let web3 = new Web3(window.ethereum)
-    //   let contractAddress = MINT_NFT_CONTRACT
-
-    //   let abi = JSON.parse(JSON.stringify(MINT_NFT_ABI))
-
-    //   let contract = new web3.eth.Contract(abi, contractAddress)
-
-    //   contract.methods
-    //     .tokenURI(1)
-    //     .call()
-    //     .then((result) => (this.tokenURIresult = result))
-    // }
   }
 }
 </script>

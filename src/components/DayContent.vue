@@ -3,7 +3,6 @@
     <img id="OwnerImage" :src="imagePath" />
     <div>{{ date }}'s Owner : {{ ownerBeforeMint }}</div>
     <div id="buttonsComp">
-      {{ text }}
       <input id="input" v-model="text" />
       <button id="button" @click="uploadMessage">방명록 남기기</button>
       <button id="button" @click="handleButtonClick">이미지 바꾸기</button>
@@ -17,9 +16,12 @@
       />
     </div>
     <div>{{ message }}</div>
+    <div>{{ VUE_APP_BACKEND_URL }}</div>
   </div>
 </template>
 <script>
+// Load the SDK for JavaScript
+var AWS = require('aws-sdk')
 export default {
   name: 'DayContent',
   components: {},
@@ -38,7 +40,7 @@ export default {
   setup() {},
   async created() {
     await this.axios
-      .get('https://clesson-dev.duckdns.org:8888/dates')
+      .get(`${process.env.VUE_APP_BACKEND_URL}/dates`)
       .then((response) => {
         const res = response.data
         this.pageDates = res.data[this.pageDay - 1]
@@ -48,10 +50,9 @@ export default {
       .catch((error) => console.log(error))
 
     await this.axios
-      .get('https://clesson-dev.duckdns.org:8888/message/' + this.date)
+      .get(`${process.env.VUE_APP_BACKEND_URL}/message/` + this.date)
       .then((response) => {
         const resm = response.data
-        console.log(resm)
         this.message = resm.data.dateMessages[0]
       })
       .catch((error) => console.log(error))
@@ -69,13 +70,30 @@ export default {
         formData.append('date', this.date)
         formData.append('imgUrl', this.imagePath)
         formData.append('files', uploadFile)
-        console.log(formData)
-        // await this.axios('https://clesson-dev.duckdns.org:8888/dates/image', formData)
       }
+    },
+    async getPreSignedUrl(fileName) {
+      const s3 = new AWS.S3({
+        accessKeyId: process.env.VUE_APP_AWSAccessKeyId,
+        secretAccessKey: process.env.VUE_APP_AWSSecretKey,
+        region: process.env.VUE_APP_S3BucketRegion
+      })
+
+      const params = {
+        Bucket: process.env.VUE_APP_AWSBucketName,
+        Key: fileName,
+        Expires: 60 * 60 * 3
+      }
+
+      const signedUrlPut = await s3.getSignedUrlPromise('putObject', params)
+      return signedUrlPut
+    },
+    async uploadImageToS3(presignedUrl, file) {
+      const response = await this.axios.put(presignedUrl)
     },
     async uploadMessage() {
       await this.axios
-        .post('https://clesson-dev.duckdns.org:8888/message', {
+        .post(`${process.env.VUE_APP_BACKEND_URL}/message`, {
           message: this.text,
           date: this.date
         })
