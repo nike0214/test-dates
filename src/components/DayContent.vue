@@ -104,6 +104,7 @@ export default {
       e.preventDefault()
       if (e.target.files) {
         const uploadFile = e.target.files[0]
+        this.file = new File([uploadFile], 'test', { type: 'image/png' })
         this.formData = new FormData()
         this.formData.append('date', this.date)
         this.formData.append('imgUrl', this.imagePath)
@@ -150,9 +151,9 @@ export default {
 
       console.log('url=', this.url)
 
-      this.axios
-        .post(`${this.url}`, this.formData, {
-          header: { 'Content-Type': 'multipart/form-data' }
+      await this.axios
+        .put(`${this.url}`, this.file, {
+          header: { 'Content-Type': 'image/jpg' }
         })
         .then(({ data }) => {
           this.images = data
