@@ -1,6 +1,7 @@
 <template>
   <div id="daycont">
     <img id="OwnerImage" :src="imagePath" />
+    <img id="OwnerImage" :src="images" />{{ images }}
     <div>{{ date }}'s Owner : {{ ownerBeforeMint }}</div>
     <div id="buttonsComp">
       <input id="input" v-model="text" />
@@ -15,8 +16,28 @@
         hidden
       />
     </div>
-    <div>{{ message }}</div>
-    <div>{{ JWT.accessToken }}</div>
+    <div id="comTitle">방명록</div>
+    <div id="comments">
+      <div>{{ walletAddressInMessage[0] }}</div>
+      <div>{{ messageInMessage[0] }}</div>
+    </div>
+    <div id="comments">
+      <div>{{ walletAddressInMessage[1] }}</div>
+      <div>{{ messageInMessage[1] }}</div>
+    </div>
+    <div id="comments">
+      <div>{{ walletAddressInMessage[2] }}</div>
+      <div>{{ messageInMessage[2] }}</div>
+    </div>
+    <div id="comments">
+      <div>{{ walletAddressInMessage[3] }}</div>
+      <div>{{ messageInMessage[3] }}</div>
+    </div>
+    <div id="comments">
+      <div>{{ walletAddressInMessage[4] }}</div>
+      <div>{{ messageInMessage[4] }}</div>
+    </div>
+    <div>{{ this.signature }} {{ publicAddress }}</div>
   </div>
 </template>
 <script>
@@ -38,10 +59,14 @@ export default {
       nonce: 0,
       text: '',
       date: '',
-      message: '댓글이 없습니다',
+      messageInMessage: [],
+      walletAddressInMessage: [],
       publicAddress: '',
       JWT: '',
-      signature: ''
+      signature: '',
+      images: '',
+      formData: '',
+      url: ''
     }
   },
   setup() {},
@@ -61,7 +86,11 @@ export default {
       .then((response) => {
         const resm = response.data
         // 1번째로 남긴 댓글
-        this.message = resm.data.dateMessages[0].message.message
+        const messages = resm.data.dateMessages.reverse()
+        for (var i = 0; i < 5; i++) {
+          this.walletAddressInMessage[i] = messages[i].message.walletAddress
+          this.messageInMessage[i] = messages[i].message.message
+        }
       })
       .catch((error) => console.log(error))
   },
@@ -71,14 +100,64 @@ export default {
       this.$refs.file.click()
     },
     async handleFileUpload(e) {
+      // formData 형성
       e.preventDefault()
       if (e.target.files) {
         const uploadFile = e.target.files[0]
-        const formData = new FormData()
-        formData.append('date', this.date)
-        formData.append('imgUrl', this.imagePath)
-        formData.append('files', uploadFile)
+        this.formData = new FormData()
+        this.formData.append('date', this.date)
+        this.formData.append('imgUrl', this.imagePath)
+        this.formData.append('files', uploadFile)
       }
+
+      // JWT 받기
+      this.publicAddress = await window.ethereum.request({ method: 'eth_requestAccounts' })
+      this.publicAddress = this.publicAddress[0]
+
+      this.signature = await web3.eth.personal.sign(
+        web3.utils.fromUtf8('이미지 업로드'),
+        this.publicAddress,
+        // 일단 password는 test password! 로 저장
+        'test password!'
+      )
+
+      await this.axios
+        .post(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+          address: this.publicAddress,
+          signature: this.signature
+        })
+        .then((response) => {
+          const res = response.data
+          this.JWT = res.data
+        })
+        .catch((error) => {
+          console.log(error)
+        })
+
+      // presigned url 요청하기
+      await this.axios
+        .get(`${process.env.VUE_APP_BACKEND_URL}/dates/image/${this.date}/pre-signed-url`, {
+          params: { date: this.date },
+          headers: {
+            Authorization: `Bearer ${this.JWT.accessToken}`
+          }
+        })
+        .then((response) => {
+          const res = response.data
+          this.url = res.data
+        })
+        .catch((error) => console.log(error))
+
+      console.log('url=', this.url)
+
+      this.axios
+        .post(`${this.url}`, this.formData, {
+          header: { 'Content-Type': 'multipart/form-data' }
+        })
+        .then(({ data }) => {
+          this.images = data
+        })
+        .catch((error) => console.log(error))
     },
     async getPreSignedUrl(fileName) {
       const s3 = new AWS.S3({
@@ -145,7 +224,7 @@ export default {
         })
         .catch((error) => {
           console.log(error)
-          alert('더 이상 방명록을 작성할 수 없습니다.')
+          alert('방명록을 작성할 수 없습니다.')
         })
     },
     async login() {
@@ -216,5 +295,13 @@ export default {
 #input {
   height: 20px;
   align-self: center;
+}
+#comments {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px;
+}
+#comTitle {
+  border-bottom: thick double;
 }
 </style>
