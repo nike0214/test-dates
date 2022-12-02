@@ -16,10 +16,13 @@
       />
     </div>
     <div>{{ message }}</div>
-    <div>{{ VUE_APP_BACKEND_URL }}</div>
+    <div>{{ JWT.accessToken }}</div>
   </div>
 </template>
 <script>
+var Web3 = require('web3')
+// "Web3.providers.givenProvider" will be set if in an Ethereum supported browser.
+var web3 = new Web3(Web3.givenProvider || 'ws://some.local-or-remote.node:8546')
 // Load the SDK for JavaScript
 var AWS = require('aws-sdk')
 export default {
@@ -32,9 +35,13 @@ export default {
       pageDates: '',
       pageDay: parseInt(this.$route.params.id),
       imagePath: '',
+      nonce: 0,
       text: '',
       date: '',
-      message: '댓글이 없습니다'
+      message: '댓글이 없습니다',
+      publicAddress: '',
+      JWT: '',
+      signature: ''
     }
   },
   setup() {},
@@ -53,7 +60,8 @@ export default {
       .get(`${process.env.VUE_APP_BACKEND_URL}/message/` + this.date)
       .then((response) => {
         const resm = response.data
-        this.message = resm.data.dateMessages[0]
+        // 1번째로 남긴 댓글
+        this.message = resm.data.dateMessages[0].message.message
       })
       .catch((error) => console.log(error))
   },
@@ -89,18 +97,96 @@ export default {
       return signedUrlPut
     },
     async uploadImageToS3(presignedUrl, file) {
-      const response = await this.axios.put(presignedUrl)
+      // const response = await this.axios.put(presignedUrl)
     },
+
+    // 여기만 신경쓰자
     async uploadMessage() {
+      // JWT 받기
+      this.publicAddress = await window.ethereum.request({ method: 'eth_requestAccounts' })
+      this.publicAddress = this.publicAddress[0]
+
+      this.signature = await web3.eth.personal.sign(
+        web3.utils.fromUtf8(`남길 방명록 : ${this.text}`),
+        this.publicAddress,
+        // 일단 password는 test password! 로 저장
+        'test password!'
+      )
+
       await this.axios
-        .post(`${process.env.VUE_APP_BACKEND_URL}/message`, {
-          message: this.text,
-          date: this.date
+        .post(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+          address: this.publicAddress,
+          signature: this.signature
         })
+        .then((response) => {
+          const res = response.data
+          this.JWT = res.data
+        })
+        .catch((error) => {
+          console.log(error)
+        })
+
+      // 메세지 보내기
+      await this.axios
+        .post(
+          `${process.env.VUE_APP_BACKEND_URL}/message`,
+          {
+            message: this.text,
+            date: this.date
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.JWT.accessToken}`
+            }
+          }
+        )
         .then((response) => {
           console.log(response)
         })
-        .catch((error) => console.log(error))
+        .catch((error) => {
+          console.log(error)
+          alert('더 이상 방명록을 작성할 수 없습니다.')
+        })
+    },
+    async login() {
+      this.publicAddress = await window.ethereum.request({ method: 'eth_requestAccounts' })
+      this.publicAddress = this.publicAddress[0]
+      // Check if user with current publicAddress is already present on back end
+      this.axios
+        .get(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+          params: { address: this.publicAddress }
+        })
+        .then((response) => {
+          const res = response.data
+          const resdata = res.data
+          this.nonce = parseInt(resdata.nonce)
+          this.axios.post(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+            address: this.publicAddress,
+            signature: this.signature
+          })
+          this.handleSignMessage(this.publicAddress)
+        })
+    },
+    async handleSignMessage(publicAddress) {
+      this.signature = await web3.eth.personal.sign(
+        web3.utils.fromUtf8(`남길 방명록 : ${this.text}`),
+        publicAddress,
+        // 일단 password는 test password! 로 저장
+        'test password!'
+      )
+
+      this.axios
+        .post(`${process.env.VUE_APP_BACKEND_URL}/users/sign-in`, {
+          address: publicAddress,
+          signature: this.signature
+        })
+        .then((response) => {
+          this.JWT = response
+        })
+        .catch((error) => {
+          alert('더 이상 방명록을 작성할 수 없습니다.')
+          console.log(error)
+        })
     }
   }
 }
