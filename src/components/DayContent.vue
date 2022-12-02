@@ -1,7 +1,6 @@
 <template>
   <div id="daycont">
     <img id="OwnerImage" :src="imagePath" />
-    <img id="OwnerImage" :src="images" />{{ images }}
     <div>{{ date }}'s Owner : {{ ownerBeforeMint }}</div>
     <div id="buttonsComp">
       <input id="input" v-model="text" />
@@ -10,12 +9,12 @@
       <input
         id="button"
         type="file"
-        ref="file"
+        ref="nftimage"
         accept="image/jpeg"
         v-on:change="handleFileUpload"
-        hidden
       />
     </div>
+    <div>{{ imagePath }}</div>
     <div id="comTitle">방명록</div>
     <div id="comments">
       <div>{{ walletAddressInMessage[0] }}</div>
@@ -66,7 +65,8 @@ export default {
       signature: '',
       images: '',
       formData: '',
-      url: ''
+      url: '',
+      NFTImage: ''
     }
   },
   setup() {},
@@ -99,15 +99,15 @@ export default {
     handleButtonClick(events) {
       this.$refs.file.click()
     },
-    async handleFileUpload(e) {
+    async handleFileUpload() {
+      console.log(this.$refs)
+      this.NFTImage = await this.$refs.nftimage.files[0]
       // formData 형성
-      e.preventDefault()
-      if (e.target.files) {
-        const uploadFile = e.target.files[0]
-        this.formData = new FormData()
-        this.formData.append('date', this.date)
-        this.formData.append('imgUrl', this.imagePath)
-        this.formData.append('files', uploadFile)
+      this.formData = new FormData()
+      this.formData.append('NFTImage', this.NFTImage)
+
+      for (var key of this.formData.entries()) {
+        console.log(`${key}`)
       }
 
       // JWT 받기
@@ -144,14 +144,14 @@ export default {
         })
         .then((response) => {
           const res = response.data
-          this.url = res.data
+          this.imagePath = res.data
         })
         .catch((error) => console.log(error))
 
-      console.log('url=', this.url)
+      console.log('url=', this.imagePath)
 
       this.axios
-        .post(`${this.url}`, this.formData, {
+        .post(`${this.imagePath}`, this.formData, {
           header: { 'Content-Type': 'multipart/form-data' }
         })
         .then(({ data }) => {
